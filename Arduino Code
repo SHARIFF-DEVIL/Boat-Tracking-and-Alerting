@@ -1,0 +1,68 @@
+#include <SoftwareSerial.h>
+#include <TinyGPS++.h>
+
+SoftwareSerial gpsSerial(4, 3); // RX, TX for GPS
+SoftwareSerial gsmSerial(7, 8); // TX, RX for GSM
+
+TinyGPSPlus gps;
+
+const float boundaryLat = 9.81; // Example latitude (change as needed)
+const float boundaryLon = 79.85; // Example longitude
+
+const int buzzerPin = 9;
+const int sosButton = 2;
+
+void setup() {
+  Serial.begin(9600);
+  gpsSerial.begin(9600);
+  gsmSerial.begin(9600);
+
+  pinMode(buzzerPin, OUTPUT);
+  pinMode(sosButton, INPUT_PULLUP);
+
+  delay(1000);
+  sendSMS("Device Started. Tracking Fisherman...");
+}
+
+void loop() {
+  while (gpsSerial.available() > 0) {
+    gps.encode(gpsSerial.read());
+  }
+
+  if (gps.location.isValid()) {
+    float lat = gps.location.lat();
+    float lon = gps.location.lng();
+
+    Serial.print("Lat: "); Serial.println(lat);
+    Serial.print("Lon: "); Serial.println(lon);
+
+    if (checkBoundaryCross(lat, lon)) {
+      digitalWrite(buzzerPin, HIGH);
+      sendSMS("Alert! Boundary crossed. Location: https://maps.google.com/?q=" + String(lat, 6) + "," + String(lon, 6));
+      delay(5000);
+      digitalWrite(buzzerPin, LOW);
+    }
+
+    if (digitalRead(sosButton) == LOW) {
+      sendSMS("SOS! Fisherman needs help. Location: https://maps.google.com/?q=" + String(lat, 6) + "," + String(lon, 6));
+      delay(5000); // Debounce
+    }
+  }
+
+  delay(1000);
+}
+
+bool checkBoundaryCross(float lat, float lon) {
+  // Simple distance check or region check
+  return (lat < boundaryLat || lon > boundaryLon); // Example condition
+}
+
+void sendSMS(String message) {
+  gsmSerial.println("AT+CMGF=1");
+  delay(1000);
+  gsmSerial.println("AT+CMGS=\"+91XXXXXXXXXX\""); // Replace with actual phone number
+  delay(1000);
+  gsmSerial.print(message);
+  gsmSerial.write(26); // Ctrl+Z
+  delay(3000);
+}
